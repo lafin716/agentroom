@@ -1,0 +1,12 @@
+# agentroom ignore (gitignore-compatible)
+# Files matched here are excluded from the workspace copy
+# AND are never touched by sync.
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+**/secrets/**

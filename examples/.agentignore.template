@@ -1,0 +1,28 @@
+# agentroom ignore (gitignore 호환 문법)
+# 이 파일에 매칭되는 항목은 복사본에서 제외되며 sync 시에도 절대 건드리지 않습니다.
+
+# 환경 변수
+.env
+.env.*
+!.env.example
+
+# 시크릿/키 파일
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+**/secrets/**
+
+# 로컬 설정
+.idea/
+.vscode/
+
+# 빌드 산출물
+bin/
+dist/
+node_modules/
+
+# 의존성/캐시
+vendor/
+__pycache__/
