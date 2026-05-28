@@ -8,3 +8,5 @@ ar.exe
 .agent/
 
 apps/desktop/node_modules/
+apps/desktop/src-tauri/binaries/
+apps/desktop/src-tauri/target/
