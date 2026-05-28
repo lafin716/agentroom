@@ -74,17 +74,19 @@ func BuildWithMasks(root string, m *ignore.Matcher, masks *mask.Config) (*Index,
 			return err
 		}
 		var sum string
+		var size int64
 		if paths := masks.PathsFor(rel); len(paths) > 0 {
-			sum, err = hashMaskedFile(path, rel, paths)
+			sum, size, err = hashMaskedFile(path, rel, paths)
 		} else {
 			sum, err = hashFile(path)
+			size = info.Size()
 		}
 		if err != nil {
 			return fmt.Errorf("hash %s: %w", rel, err)
 		}
 		idx.Files[rel] = Entry{
 			SHA256: sum,
-			Size:   info.Size(),
+			Size:   size,
 			Mode:   fmt.Sprintf("%#o", info.Mode().Perm()),
 		}
 		return nil
@@ -95,22 +97,23 @@ func BuildWithMasks(root string, m *ignore.Matcher, masks *mask.Config) (*Index,
 	return idx, nil
 }
 
-func hashMaskedFile(path, rel string, paths []string) (string, error) {
+func hashMaskedFile(path, rel string, paths []string) (string, int64, error) {
 	kind := mask.ExtKind(rel)
 	if kind == "" {
 		// Mask config references a non-yaml/json file; fall back to raw hash.
-		return hashFile(path)
+		sum, err := hashFile(path)
+		return sum, 0, err
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	masked, err := mask.Apply(raw, kind, paths)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	h := sha256.Sum256(masked)
-	return hex.EncodeToString(h[:]), nil
+	return hex.EncodeToString(h[:]), int64(len(masked)), nil
 }
 
 func hashFile(path string) (string, error) {
