@@ -12,6 +12,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type syncResult struct {
+	Applied          bool         `json:"applied"`
+	HistoryID        string       `json:"history_id,omitempty"`
+	WorkspaceChanges []changeJSON `json:"workspace_changes"`
+	AppliedChanges   []changeJSON `json:"applied_changes"`
+	Conflicts        []string     `json:"conflicts"`
+	Reason           string       `json:"reason,omitempty"`
+}
+
 func newSyncCmd() *cobra.Command {
 	var yes, force, withDelete bool
 	c := &cobra.Command{
@@ -47,9 +56,58 @@ func runSync(yes, force, withDelete bool) error {
 	if err != nil {
 		return err
 	}
+
+	conflicts := plan.Conflicts
+	if conflicts == nil {
+		conflicts = []string{}
+	}
+
 	if !plan.HasWork() {
+		if jsonEnabled() {
+			return outputJSON(syncResult{
+				Applied:          false,
+				WorkspaceChanges: []changeJSON{},
+				AppliedChanges:   []changeJSON{},
+				Conflicts:        conflicts,
+				Reason:           "nothing to sync",
+			})
+		}
 		fmt.Println("nothing to sync.")
 		return nil
+	}
+
+	if jsonEnabled() {
+		// Under --json, never prompt. Conflicts without --force return applied=false.
+		if len(plan.Conflicts) > 0 && !force {
+			return outputJSON(syncResult{
+				Applied:          false,
+				WorkspaceChanges: toChangeJSON(plan.WorkspaceChanges),
+				AppliedChanges:   []changeJSON{},
+				Conflicts:        conflicts,
+				Reason:           "conflicts detected; rerun with --force to overwrite",
+			})
+		}
+		man, err := syncer.Apply(syncer.ApplyOptions{
+			MainPath:      mainPath,
+			WorkspacePath: cfg.WorkspacePath,
+			Plan:          plan,
+			WithDelete:    withDelete,
+			Force:         force,
+		})
+		if err != nil {
+			return err
+		}
+		applied := make([]changeJSON, 0, len(man.Changes))
+		for _, c := range man.Changes {
+			applied = append(applied, changeJSON{Op: string(c.Op), Path: c.Path})
+		}
+		return outputJSON(syncResult{
+			Applied:          true,
+			HistoryID:        man.ID,
+			WorkspaceChanges: toChangeJSON(plan.WorkspaceChanges),
+			AppliedChanges:   applied,
+			Conflicts:        conflicts,
+		})
 	}
 
 	printChanges("workspace -> main", plan.WorkspaceChanges)

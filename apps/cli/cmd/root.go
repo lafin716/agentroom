@@ -1,8 +1,17 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 )
+
+// Version is reported by `ar info` (overridable via -ldflags at build time).
+var Version = "0.1.0"
+
+var jsonOutput bool
 
 var rootCmd = &cobra.Command{
 	Use:   "ar",
@@ -19,6 +28,7 @@ func Execute() error {
 }
 
 func init() {
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "emit machine-readable JSON instead of human output")
 	rootCmd.AddCommand(
 		newInitCmd(),
 		newCopyCmd(),
@@ -27,5 +37,20 @@ func init() {
 		newUndoCmd(),
 		newHistoryCmd(),
 		newInfoCmd(),
+		newResetCmd(),
+		newMaskCmd(),
 	)
+}
+
+// jsonEnabled reports whether the --json flag is set.
+func jsonEnabled() bool { return jsonOutput }
+
+// outputJSON writes v as pretty JSON to stdout.
+func outputJSON(v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stdout, string(data))
+	return nil
 }

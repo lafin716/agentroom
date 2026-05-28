@@ -16,12 +16,10 @@ const (
 
 // Change is a single difference between two indexes.
 type Change struct {
-	Path string
-	Op   Op
-	// Old is the entry before; nil for added.
-	Old *index.Entry
-	// New is the entry after; nil for deleted.
-	New *index.Entry
+	Path string       `json:"path"`
+	Op   Op           `json:"op"`
+	Old  *index.Entry `json:"old,omitempty"`
+	New  *index.Entry `json:"new,omitempty"`
 }
 
 // Diff returns the changes that turn "from" into "to". Both indexes must use the same root.

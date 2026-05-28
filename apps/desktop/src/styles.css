@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, "Segoe UI", "Noto Sans KR", sans-serif;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors;
+}
+.btn-primary {
+  @apply bg-accent text-white hover:bg-accent-hover disabled:bg-zinc-700 disabled:text-zinc-400;
+}
+.btn-secondary {
+  @apply bg-zinc-800 text-zinc-100 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-600;
+}
+.btn-danger {
+  @apply bg-red-600 text-white hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-400;
+}

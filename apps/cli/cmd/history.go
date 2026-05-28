@@ -2,11 +2,23 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/agentroom/agentroom/pkg/syncer"
 	"github.com/agentroom/agentroom/pkg/workspace"
 	"github.com/spf13/cobra"
 )
+
+type historyEntryJSON struct {
+	Seq       int       `json:"seq"`
+	ID        string    `json:"id"`
+	Summary   string    `json:"summary"`
+	AppliedAt time.Time `json:"applied_at"`
+}
+
+type historyResult struct {
+	Entries []historyEntryJSON `json:"entries"`
+}
 
 func newHistoryCmd() *cobra.Command {
 	return &cobra.Command{
@@ -27,6 +39,20 @@ func runHistory() error {
 	if err != nil {
 		return err
 	}
+
+	if jsonEnabled() {
+		res := historyResult{Entries: make([]historyEntryJSON, 0, len(h.Entries))}
+		for i, e := range h.Entries {
+			res.Entries = append(res.Entries, historyEntryJSON{
+				Seq:       i + 1,
+				ID:        e.ID,
+				Summary:   e.Summary,
+				AppliedAt: e.AppliedAt,
+			})
+		}
+		return outputJSON(res)
+	}
+
 	if len(h.Entries) == 0 {
 		fmt.Println("(no syncs yet)")
 		return nil

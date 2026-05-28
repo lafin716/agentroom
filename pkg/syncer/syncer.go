@@ -11,6 +11,7 @@ import (
 	"github.com/agentroom/agentroom/pkg/differ"
 	"github.com/agentroom/agentroom/pkg/ignore"
 	"github.com/agentroom/agentroom/pkg/index"
+	"github.com/agentroom/agentroom/pkg/mask"
 	"github.com/agentroom/agentroom/pkg/snapshot"
 	"github.com/agentroom/agentroom/pkg/workspace"
 )
@@ -41,11 +42,15 @@ func Analyze(opt AnalyzeOptions) (*Plan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load .agentignore: %w", err)
 	}
-	wsIdx, err := index.Build(opt.WorkspacePath, matcher)
+	masksCfg, err := mask.Load(opt.MainPath)
+	if err != nil {
+		return nil, fmt.Errorf("load masks: %w", err)
+	}
+	wsIdx, err := index.BuildWithMasks(opt.WorkspacePath, matcher, masksCfg)
 	if err != nil {
 		return nil, fmt.Errorf("scan workspace: %w", err)
 	}
-	mainIdx, err := index.Build(opt.MainPath, matcher)
+	mainIdx, err := index.BuildWithMasks(opt.MainPath, matcher, masksCfg)
 	if err != nil {
 		return nil, fmt.Errorf("scan main: %w", err)
 	}
@@ -122,6 +127,13 @@ func Apply(opt ApplyOptions) (*Manifest, error) {
 		})
 	}
 
+	// Load masks once so masked-path writes restore main values rather than
+	// blindly copying the agent's edits at those paths.
+	masksCfg, err := mask.Load(opt.MainPath)
+	if err != nil {
+		return nil, fmt.Errorf("load masks: %w", err)
+	}
+
 	// Step 2: apply changes from workspace -> main.
 	for _, rec := range manifest.Changes {
 		mainFile := filepath.Join(opt.MainPath, filepath.FromSlash(rec.Path))
@@ -131,7 +143,11 @@ func Apply(opt ApplyOptions) (*Manifest, error) {
 			if err := os.MkdirAll(filepath.Dir(mainFile), 0o755); err != nil {
 				return nil, err
 			}
-			if err := copyFile(wsFile, mainFile); err != nil {
+			if maskedPaths := masksCfg.PathsFor(rec.Path); len(maskedPaths) > 0 && rec.Op == differ.OpModified {
+				if err := writeMaskedMerge(wsFile, mainFile, rec.Path, maskedPaths); err != nil {
+					return nil, fmt.Errorf("write masked %s: %w", rec.Path, err)
+				}
+			} else if err := copyFile(wsFile, mainFile); err != nil {
 				return nil, fmt.Errorf("write %s: %w", rec.Path, err)
 			}
 		case differ.OpDeleted:
@@ -146,7 +162,7 @@ func Apply(opt ApplyOptions) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	newBaseline, err := index.Build(opt.MainPath, matcher)
+	newBaseline, err := index.BuildWithMasks(opt.MainPath, matcher, masksCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +244,35 @@ func Undo(mainPath string) (*Manifest, error) {
 	_ = os.RemoveAll(EntryDir(mainPath, top.ID))
 
 	return man, nil
+}
+
+// writeMaskedMerge reads the workspace file and the current main file, merges
+// masked paths from main into the workspace content, then atomically writes
+// the result to main. This guarantees the agent's edits to non-masked fields
+// land while masked fields are restored to whatever main currently has.
+func writeMaskedMerge(wsFile, mainFile, relPath string, maskedPaths []string) error {
+	kind := mask.ExtKind(relPath)
+	if kind == "" {
+		return copyFile(wsFile, mainFile)
+	}
+	wsBytes, err := os.ReadFile(wsFile)
+	if err != nil {
+		return err
+	}
+	mainBytes, err := os.ReadFile(mainFile)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	merged, err := mask.MergeFromMain(wsBytes, mainBytes, kind, maskedPaths)
+	if err != nil {
+		return err
+	}
+	info, _ := os.Stat(mainFile)
+	mode := os.FileMode(0o644)
+	if info != nil {
+		mode = info.Mode().Perm()
+	}
+	return workspace.AtomicWrite(mainFile, merged, mode)
 }
 
 func copyFile(src, dst string) error {

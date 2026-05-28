@@ -7,6 +7,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type undoneEntry struct {
+	ID           string `json:"id"`
+	ChangesCount int    `json:"changes_count"`
+}
+
+type undoResult struct {
+	Undone    []undoneEntry `json:"undone"`
+	Remaining int           `json:"remaining"`
+}
+
 func newUndoCmd() *cobra.Command {
 	var steps int
 	c := &cobra.Command{
@@ -28,12 +38,24 @@ func runUndo(steps int) error {
 	if steps < 1 {
 		steps = 1
 	}
+	res := undoResult{Undone: []undoneEntry{}}
 	for i := 0; i < steps; i++ {
 		man, err := syncer.Undo(mainPath)
 		if err != nil {
 			return err
 		}
-		logx.Infof("undone: %s (%d changes)", man.ID, len(man.Changes))
+		res.Undone = append(res.Undone, undoneEntry{ID: man.ID, ChangesCount: len(man.Changes)})
+		if !jsonEnabled() {
+			logx.Infof("undone: %s (%d changes)", man.ID, len(man.Changes))
+		}
+	}
+	if jsonEnabled() {
+		h, err := syncer.LoadHistory(mainPath)
+		if err != nil {
+			return err
+		}
+		res.Remaining = len(h.Entries)
+		return outputJSON(res)
 	}
 	return nil
 }

@@ -16,6 +16,7 @@ const (
 	HistoryDir       = "history"
 	HistoryIndexFile = "index.json"
 	IgnoreFile       = ".agentignore"
+	MasksFile        = "masks.json"
 	WorkspaceMarker  = ".agent-workspace.json"
 	ConfigVersion    = 1
 )
@@ -56,6 +57,10 @@ func HistoryIndexPath(mainPath string) string {
 
 func IgnorePath(mainPath string) string {
 	return filepath.Join(mainPath, IgnoreFile)
+}
+
+func MasksPath(mainPath string) string {
+	return filepath.Join(AgentPath(mainPath), MasksFile)
 }
 
 func MarkerPath(workspacePath string) string {

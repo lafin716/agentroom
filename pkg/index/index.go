@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/agentroom/agentroom/pkg/ignore"
+	"github.com/agentroom/agentroom/pkg/mask"
 )
 
 // Entry is a single file's recorded state.
@@ -35,6 +36,14 @@ func New() *Index {
 
 // Build walks root, hashes every non-ignored regular file, and returns the index.
 func Build(root string, m *ignore.Matcher) (*Index, error) {
+	return BuildWithMasks(root, m, nil)
+}
+
+// BuildWithMasks is like Build but, for any file with masked paths configured
+// in masks, hashes the mask-applied content instead of the raw bytes. This
+// normalization means workspace, main, and baseline all hash the same masked
+// content — diffs ignore mask-only changes and only flag real edits.
+func BuildWithMasks(root string, m *ignore.Matcher, masks *mask.Config) (*Index, error) {
 	idx := New()
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -64,7 +73,12 @@ func Build(root string, m *ignore.Matcher) (*Index, error) {
 		if err != nil {
 			return err
 		}
-		sum, err := hashFile(path)
+		var sum string
+		if paths := masks.PathsFor(rel); len(paths) > 0 {
+			sum, err = hashMaskedFile(path, rel, paths)
+		} else {
+			sum, err = hashFile(path)
+		}
 		if err != nil {
 			return fmt.Errorf("hash %s: %w", rel, err)
 		}
@@ -79,6 +93,24 @@ func Build(root string, m *ignore.Matcher) (*Index, error) {
 		return nil, err
 	}
 	return idx, nil
+}
+
+func hashMaskedFile(path, rel string, paths []string) (string, error) {
+	kind := mask.ExtKind(rel)
+	if kind == "" {
+		// Mask config references a non-yaml/json file; fall back to raw hash.
+		return hashFile(path)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	masked, err := mask.Apply(raw, kind, paths)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256(masked)
+	return hex.EncodeToString(h[:]), nil
 }
 
 func hashFile(path string) (string, error) {

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "agentroom",
+  "version": "0.1.0",
+  "identifier": "io.agentroom.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "agentroom",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 540,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/ar"],
+    "category": "DeveloperTool",
+    "shortDescription": "agentroom - sensitive-aware workspace mirror",
+    "longDescription": "agentroom isolates sensitive files from agent workspaces using .agentignore-based exclusion and safe two-way sync."
+  }
+}

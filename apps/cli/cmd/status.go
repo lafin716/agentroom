@@ -2,12 +2,27 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/agentroom/agentroom/pkg/differ"
 	"github.com/agentroom/agentroom/pkg/syncer"
 	"github.com/agentroom/agentroom/pkg/workspace"
 	"github.com/spf13/cobra"
 )
+
+type changeJSON struct {
+	Op   string `json:"op"`
+	Path string `json:"path"`
+}
+
+type statusResult struct {
+	Main             string       `json:"main"`
+	Workspace        string       `json:"workspace"`
+	LastSync         *time.Time   `json:"last_sync,omitempty"`
+	WorkspaceChanges []changeJSON `json:"workspace_changes"`
+	MainChanges      []changeJSON `json:"main_changes"`
+	Conflicts        []string     `json:"conflicts"`
+}
 
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
@@ -40,6 +55,24 @@ func runStatus() error {
 		return err
 	}
 
+	if jsonEnabled() {
+		res := statusResult{
+			Main:             mainPath,
+			Workspace:        cfg.WorkspacePath,
+			WorkspaceChanges: toChangeJSON(plan.WorkspaceChanges),
+			MainChanges:      toChangeJSON(plan.MainChanges),
+			Conflicts:        plan.Conflicts,
+		}
+		if res.Conflicts == nil {
+			res.Conflicts = []string{}
+		}
+		if !cfg.LastSyncAt.IsZero() {
+			t := cfg.LastSyncAt
+			res.LastSync = &t
+		}
+		return outputJSON(res)
+	}
+
 	fmt.Printf("main:      %s\n", mainPath)
 	fmt.Printf("workspace: %s\n", cfg.WorkspacePath)
 	if !cfg.LastSyncAt.IsZero() {
@@ -59,6 +92,14 @@ func runStatus() error {
 		}
 	}
 	return nil
+}
+
+func toChangeJSON(cs []differ.Change) []changeJSON {
+	out := make([]changeJSON, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, changeJSON{Op: string(c.Op), Path: c.Path})
+	}
+	return out
 }
 
 func printChanges(title string, cs []differ.Change) {

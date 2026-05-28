@@ -2,10 +2,22 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/agentroom/agentroom/pkg/workspace"
 	"github.com/spf13/cobra"
 )
+
+type infoResult struct {
+	Version       int        `json:"version"`
+	CLIVersion    string     `json:"cli_version"`
+	ProjectName   string     `json:"project_name"`
+	MainPath      string     `json:"main_path"`
+	WorkspacePath string     `json:"workspace_path,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	LastSyncAt    *time.Time `json:"last_sync_at,omitempty"`
+	Initialized   bool       `json:"initialized"`
+}
 
 func newInfoCmd() *cobra.Command {
 	return &cobra.Command{
@@ -26,6 +38,24 @@ func runInfo() error {
 	if err != nil {
 		return err
 	}
+
+	if jsonEnabled() {
+		res := infoResult{
+			Version:       cfg.Version,
+			CLIVersion:    Version,
+			ProjectName:   cfg.ProjectName,
+			MainPath:      cfg.MainPath,
+			WorkspacePath: cfg.WorkspacePath,
+			CreatedAt:     cfg.CreatedAt,
+			Initialized:   true,
+		}
+		if !cfg.LastSyncAt.IsZero() {
+			t := cfg.LastSyncAt
+			res.LastSyncAt = &t
+		}
+		return outputJSON(res)
+	}
+
 	fmt.Printf("project:   %s\n", cfg.ProjectName)
 	fmt.Printf("version:   %d\n", cfg.Version)
 	fmt.Printf("main:      %s\n", cfg.MainPath)

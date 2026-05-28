@@ -26,6 +26,15 @@ secrets/
 **/secrets/**
 `
 
+type initResult struct {
+	Initialized bool   `json:"initialized"`
+	AgentDir    string `json:"agent_dir"`
+	IgnorePath  string `json:"ignore_path"`
+	ConfigPath  string `json:"config_path"`
+	IgnoreWrote bool   `json:"ignore_wrote"`
+	ConfigWrote bool   `json:"config_wrote"`
+}
+
 func newInitCmd() *cobra.Command {
 	var force bool
 	c := &cobra.Command{
@@ -45,7 +54,13 @@ func runInit(force bool) error {
 		return err
 	}
 
-	ignorePath := workspace.IgnorePath(mainPath)
+	res := initResult{
+		AgentDir:   workspace.AgentPath(mainPath),
+		IgnorePath: workspace.IgnorePath(mainPath),
+		ConfigPath: workspace.ConfigPath(mainPath),
+	}
+
+	ignorePath := res.IgnorePath
 	if _, err := os.Stat(ignorePath); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -53,19 +68,31 @@ func runInit(force bool) error {
 		if err := os.WriteFile(ignorePath, []byte(defaultAgentignore), 0o644); err != nil {
 			return err
 		}
-		logx.Infof("created %s", ignorePath)
+		res.IgnoreWrote = true
+		if !jsonEnabled() {
+			logx.Infof("created %s", ignorePath)
+		}
 	} else if force {
 		if err := os.WriteFile(ignorePath, []byte(defaultAgentignore), 0o644); err != nil {
 			return err
 		}
-		logx.Infof("overwrote %s", ignorePath)
-	} else {
+		res.IgnoreWrote = true
+		if !jsonEnabled() {
+			logx.Infof("overwrote %s", ignorePath)
+		}
+	} else if !jsonEnabled() {
 		logx.Infof("kept existing %s", ignorePath)
 	}
 
-	cfgPath := workspace.ConfigPath(mainPath)
+	cfgPath := res.ConfigPath
 	if _, err := os.Stat(cfgPath); err == nil && !force {
-		logx.Infof("kept existing %s", cfgPath)
+		res.Initialized = true
+		if !jsonEnabled() {
+			logx.Infof("kept existing %s", cfgPath)
+		}
+		if jsonEnabled() {
+			return outputJSON(res)
+		}
 		return nil
 	}
 
@@ -78,11 +105,17 @@ func runInit(force bool) error {
 	if err := workspace.SaveConfig(mainPath, cfg); err != nil {
 		return err
 	}
-	// Write a small .gitignore inside .agent/ so internals don't pollute git.
 	gi := []byte("# agentroom internals\nhistory/\nbaseline.json\n")
 	if err := os.WriteFile(filepath.Join(workspace.AgentPath(mainPath), ".gitignore"), gi, 0o644); err != nil {
 		return err
 	}
+	res.Initialized = true
+	res.ConfigWrote = true
+
+	if jsonEnabled() {
+		return outputJSON(res)
+	}
+
 	logx.Infof("initialized %s", cfgPath)
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. Edit .agentignore to list sensitive files.")
